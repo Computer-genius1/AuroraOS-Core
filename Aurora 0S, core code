@@ -20,7 +20,10 @@ struct ShellView: View {
             Color.black.ignoresSafeArea()
 
             if let app = currentApp {
-                app.view.transition(.opacity)
+                withAnimation(.easeInOut) {
+                    app.view
+                        .transition(.opacity)
+                }
             }
 
             if showStart {
@@ -29,19 +32,25 @@ struct ShellView: View {
                     showStart = false
                 }
                 .transition(.move(edge: .bottom))
+                .zIndex(1) // ensures Start menu is always on top
+                .allowsHitTesting(true)
             }
         }
         .gesture(
             DragGesture(minimumDistance: 50)
                 .onEnded { value in
-                    if value.translation.height > 80 {
+                    // Only vertical swipes, distinguish open/close
+                    if value.translation.height > 80 && abs(value.translation.width) < 40 {
                         withAnimation {
-                            showStart.toggle()
+                            showStart = true
+                        }
+                    } else if value.translation.height < -80 && abs(value.translation.width) < 40 {
+                        withAnimation {
+                            showStart = false
                         }
                     }
                 }
         )
-        .animation(.easeInOut, value: showStart)
     }
 }
 
@@ -51,6 +60,8 @@ struct ShellApp: Identifiable {
     let name: String
     let icon: String
     let view: AnyView
+    // NOTE: Using AnyView simplifies base code for contributors.
+    // For larger apps, consider using generics for performance optimization.
 }
 
 // MARK: - Start Menu
@@ -122,6 +133,8 @@ struct FileExplorerView: View {
             List(folders, id: \.self) { folder in
                 Label(folder, systemImage: "folder")
             }
+            .scrollContentBackground(.hidden) // Fix background issue
+            .background(Color.white)
         }
         .background(Color.white)
         .ignoresSafeArea()
@@ -140,12 +153,13 @@ struct NotesView: View {
                 .padding()
 
             TextEditor(text: $text)
-                .padding()
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(10)
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.1)))
                 .padding()
         }
         .background(Color.white)
         .ignoresSafeArea()
+        // SECURITY NOTE: Safe for now as text is not exported or executed
     }
 }
+
