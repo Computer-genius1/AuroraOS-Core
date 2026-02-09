@@ -1,0 +1,151 @@
+import SwiftUI
+
+// MARK: - App Entry Point
+@main
+struct AuroraShellApp: App {
+    var body: some Scene {
+        WindowGroup {
+            ShellView()
+        }
+    }
+}
+
+// MARK: - Shell Root
+struct ShellView: View {
+    @State private var currentApp: ShellApp? = nil
+    @State private var showStart = true
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            if let app = currentApp {
+                app.view.transition(.opacity)
+            }
+
+            if showStart {
+                StartView { selectedApp in
+                    currentApp = selectedApp
+                    showStart = false
+                }
+                .transition(.move(edge: .bottom))
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 50)
+                .onEnded { value in
+                    if value.translation.height > 80 {
+                        withAnimation {
+                            showStart.toggle()
+                        }
+                    }
+                }
+        )
+        .animation(.easeInOut, value: showStart)
+    }
+}
+
+// MARK: - App Model
+struct ShellApp: Identifiable {
+    let id = UUID()
+    let name: String
+    let icon: String
+    let view: AnyView
+}
+
+// MARK: - Start Menu
+struct StartView: View {
+    let onLaunch: (ShellApp) -> Void
+
+    let apps: [ShellApp] = [
+        ShellApp(
+            name: "File Explorer",
+            icon: "folder.fill",
+            view: AnyView(FileExplorerView())
+        ),
+        ShellApp(
+            name: "Notes",
+            icon: "note.text",
+            view: AnyView(NotesView())
+        )
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("Start")
+                .font(.largeTitle)
+                .bold()
+                .foregroundColor(.white)
+                .padding()
+
+            LazyVGrid(columns: [
+                GridItem(.adaptive(minimum: 100), spacing: 16)
+            ]) {
+                ForEach(apps) { app in
+                    Button {
+                        onLaunch(app)
+                    } label: {
+                        VStack(spacing: 12) {
+                            Image(systemName: app.icon)
+                                .font(.largeTitle)
+                                .foregroundColor(.white)
+
+                            Text(app.name)
+                                .font(.footnote)
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 100, height: 100)
+                        .background(Color.gray.opacity(0.25))
+                        .cornerRadius(14)
+                    }
+                }
+            }
+            .padding()
+            Spacer()
+        }
+        .background(Color.black.opacity(0.95))
+        .ignoresSafeArea()
+    }
+}
+
+// MARK: - Example App: File Explorer
+struct FileExplorerView: View {
+    let folders = ["Documents", "Downloads", "Pictures", "Apps", "System"]
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("File Explorer")
+                .font(.title)
+                .bold()
+                .padding()
+
+            List(folders, id: \.self) { folder in
+                Label(folder, systemImage: "folder")
+            }
+        }
+        .background(Color.white)
+        .ignoresSafeArea()
+    }
+}
+
+// MARK: - Example App: Notes
+struct NotesView: View {
+    @State private var text = ""
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("Notes")
+                .font(.title)
+                .bold()
+                .padding()
+
+            TextEditor(text: $text)
+                .padding()
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(10)
+                .padding()
+        }
+        .background(Color.white)
+        .ignoresSafeArea()
+    }
+}
