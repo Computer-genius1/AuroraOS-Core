@@ -12,72 +12,89 @@ struct AuroraShellApp: App {
 
 // MARK: - Shell Root
 struct ShellView: View {
-    @State private var currentApp: ShellApp? = nil
+    @StateObject private var appManager = AppManager()
     @State private var showStart = true
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let app = currentApp {
-                withAnimation(.easeInOut) {
-                    app.view
-                        .transition(.opacity)
-                }
+            if let app = appManager.activeApp {
+                app.content
+                    .transition(.opacity)
+                    .zIndex(0)
             }
 
             if showStart {
-                StartView { selectedApp in
-                    currentApp = selectedApp
-                    showStart = false
+                StartView { app in
+                    withAnimation(.easeInOut) {
+                        appManager.launch(app)
+                        showStart = false
+                    }
                 }
                 .transition(.move(edge: .bottom))
-                .zIndex(1) // ensures Start menu is always on top
-                .allowsHitTesting(true)
+                .zIndex(1)
             }
         }
-        .gesture(
-            DragGesture(minimumDistance: 50)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 60)
                 .onEnded { value in
-                    // Only vertical swipes, distinguish open/close
-                    if value.translation.height > 80 && abs(value.translation.width) < 40 {
-                        withAnimation {
-                            showStart = true
-                        }
-                    } else if value.translation.height < -80 && abs(value.translation.width) < 40 {
-                        withAnimation {
-                            showStart = false
-                        }
+                    guard abs(value.translation.width) < 40 else { return }
+
+                    if value.translation.height > 90 {
+                        withAnimation(.easeInOut) { showStart = true }
+                    } else if value.translation.height < -90 {
+                        withAnimation(.easeInOut) { showStart = false }
                     }
                 }
         )
     }
 }
 
-// MARK: - App Model
-struct ShellApp: Identifiable {
+// MARK: - App Manager (Lifecycle + State)
+final class AppManager: ObservableObject {
+    @Published var activeApp: ShellRunningApp?
+
+    func launch(_ app: ShellApp) {
+        if let existing = activeApp, existing.id == app.id {
+            return
+        }
+        activeApp = ShellRunningApp(from: app)
+    }
+}
+
+// MARK: - App Definitions
+struct ShellApp: Identifiable, Hashable {
     let id = UUID()
     let name: String
     let icon: String
-    let view: AnyView
-    // NOTE: Using AnyView simplifies base code for contributors.
-    // For larger apps, consider using generics for performance optimization.
+    let builder: () -> AnyView
+}
+
+struct ShellRunningApp: Identifiable {
+    let id: UUID
+    let content: AnyView
+
+    init(from app: ShellApp) {
+        self.id = app.id
+        self.content = app.builder()
+    }
 }
 
 // MARK: - Start Menu
 struct StartView: View {
     let onLaunch: (ShellApp) -> Void
 
-    let apps: [ShellApp] = [
+    private let apps: [ShellApp] = [
         ShellApp(
             name: "File Explorer",
             icon: "folder.fill",
-            view: AnyView(FileExplorerView())
+            builder: { AnyView(FileExplorerView()) }
         ),
         ShellApp(
             name: "Notes",
             icon: "note.text",
-            view: AnyView(NotesView())
+            builder: { AnyView(NotesView()) }
         )
     ]
 
@@ -112,16 +129,17 @@ struct StartView: View {
                 }
             }
             .padding()
+
             Spacer()
         }
-        .background(Color.black.opacity(0.95))
+        .background(Color.black.opacity(0.96))
         .ignoresSafeArea()
     }
 }
 
-// MARK: - Example App: File Explorer
+// MARK: - File Explorer (Stub)
 struct FileExplorerView: View {
-    let folders = ["Documents", "Downloads", "Pictures", "Apps", "System"]
+    private let folders = ["Documents", "Downloads", "Pictures", "Apps", "System"]
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -133,17 +151,16 @@ struct FileExplorerView: View {
             List(folders, id: \.self) { folder in
                 Label(folder, systemImage: "folder")
             }
-            .scrollContentBackground(.hidden) // Fix background issue
-            .background(Color.white)
+            .scrollContentBackground(.hidden)
         }
         .background(Color.white)
         .ignoresSafeArea()
     }
 }
 
-// MARK: - Example App: Notes
+// MARK: - Notes App (State Preserved)
 struct NotesView: View {
-    @State private var text = ""
+    @State private var text: String = ""
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -154,12 +171,14 @@ struct NotesView: View {
 
             TextEditor(text: $text)
                 .padding(8)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.1)))
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.gray.opacity(0.1))
+                )
                 .padding()
         }
         .background(Color.white)
         .ignoresSafeArea()
-        // SECURITY NOTE: Safe for now as text is not exported or executed
     }
 }
 
